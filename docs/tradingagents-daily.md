@@ -1,0 +1,59 @@
+# TradingAgents 独立日报
+
+本任务新增第二份日报，不修改现有 Daily Stock Analysis 工作流、名单或报告。
+官方 TradingAgents 固定在 `e8f5503e9b86d5c2710b0c76b1f686703968c9df`，在单独 Python 环境中运行。
+它不读取 DSA 的推荐、评分或报告，而是独立执行技术、新闻、基本面分析、多空论证及风险讨论。
+
+## 标的、日期与时间
+
+新任务专用名单是 VOO、QQQ、RKLB、000660.KS（SK 海力士）、CHWY、GLXY、GOOGL。
+不继承现有 `STOCK_LIST` 中的 TEM，亦不改动它。
+每只标的先用 XNYS/XKRX 日历确定最近已收盘的交易日，再验证 Yahoo 收盘日期。
+韩股按韩元显示，美股/ETF 按美元显示。缺少对应日期行情时显式失败，不生成建议。
+
+目标为北京时间周一至周五 07:00 发送。任务提前至 05:30 启动分析；美国冬令时收盘也已完成。
+GitHub 使用 UTC，定时为周日至周四 21:30。发信步骤等待至对应上海日期的 07:00。
+周一仍会发送，数据可能为上周五；韩国节假日单独处理。
+GitHub 排队、依赖安装、模型限流及 SMTP 传输可造成延迟，不能保证整点到账。
+超过目标五分钟在标题标注延迟。单票任务上限 35 分钟、并行最多三只。
+缺失、超时或失败标的会出现在汇总邮件内，不将其伪装为持有建议。
+
+## 凭据和可选配置
+
+复用现有 Repository Secrets：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`EMAIL_PASSWORD`。
+复用现有 Variables：`EMAIL_SENDER`、`EMAIL_RECEIVERS`。当前现有发信服务为 QQ SMTP SSL。
+密钥仅由 GitHub 在运行时注入；不读取、复制到本地或提交到仓库。
+邮件发送不依赖 Gmail 插件，也不依赖电脑保持开机或 Gmail 网页保持登录。
+
+可选 Repository Variables：
+
+| 名称 | 用途 |
+|---|---|
+| TRADINGAGENTS_MODEL | 新任务独立模型；未设时用现有模型名 |
+| TRADINGAGENTS_EMAIL_RECEIVERS | 独立收件名单；未设时用现有 EMAIL_RECEIVERS |
+| TRADINGAGENTS_SMTP_HOST | SSL SMTP 主机，当前默认 smtp.qq.com |
+| TRADINGAGENTS_SMTP_PORT | SSL SMTP 端口，当前默认 465 |
+
+OPENAI_MODEL 必须是该兼容端点接受的原始模型 ID，且需支持工具调用。
+现有模型是否与 TradingAgents 完全兼容，必须通过一次真实运行验证，不能由密钥名称推定。
+Google/Claude 原生 API 不会被静默替换；当前只接入现有 OpenAI 兼容端点。
+
+## 费用和证据边界
+
+新任务每天七只股票、多角色分析，会额外消耗现有模型账户额度和 Actions 运行分钟。
+每轮最大输出 4096 tokens，每分析员最多四轮工具调用；多空和风险讨论各一轮。
+没有已知价格或预算时不承诺免费或具体每日成本，启用前需告知用户。
+这不是 DSA 的文案改写，但可能使用同一模型和 Yahoo 行情，不能把一致结论视为独立验证。
+只选择有来源支持的内容；上游模型仍可能错误，邮件明确写出证据及数据时效限制。
+未提供实际持仓、成本与风险偏好；不生成自动订单，不连接券商。
+
+## 验收与回滚
+
+1. 先跑离线测试，检查原工作流保持不变。
+2. 经仓库要求的明确确认后，发布新增文件并手动触发 `TradingAgents 独立日报`。
+3. 验证七只标的的实际分析、日期、币种和失败披露。
+4. 在 Gmail 确认收到了标题 `[TradingAgents]` 的新邮件，才算完成启用。
+5. 定时首次运行再核对上海周一至周五及发送时间，记录任何排队延迟。
+
+回滚只需禁用 `TradingAgents 独立日报` 工作流；原有 DSA 不受影响。
+人工测试会立即发信，定时任务才等待 07:00。
