@@ -1,0 +1,94 @@
+name: TradingAgents 独立日报
+
+on:
+  schedule:
+    # Shanghai Monday-Friday 05:30. Analysis runs before the 07:00 delivery target.
+    - cron: '30 21 * * 0-4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tradingagents-independent-daily
+  cancel-in-progress: false
+
+env:
+  # Fixed reviewed revision of the OFFICIAL framework, separate from DSA.
+  TA_REVISION: e8f5503e9b86d5c2710b0c76b1f686703968c9df
+  TA_TICKERS: VOO,QQQ,RKLB,000660.KS,CHWY,GLXY,GOOGL
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        ticker: [VOO, QQQ, RKLB, 000660.KS, CHWY, GLXY, GOOGL]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install official TradingAgents in an isolated environment
+        run: |
+          python -m venv .ta-venv
+          .ta-venv/bin/python -m pip install --disable-pip-version-check "tradingagents @ git+https://github.com/TauricResearch/TradingAgents.git@${TA_REVISION}" "exchange-calendars==4.13.2"
+      - name: Independent analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || secrets.OPENAI_MODEL }}
+          TA_MODEL: ${{ vars.TRADINGAGENTS_MODEL }}
+          TRADINGAGENTS_NO_UPDATE_CHECK: '1'
+        run: .ta-venv/bin/python scripts/tradingagents_daily.py analyze --ticker '${{ matrix.ticker }}' --output ta-results
+      - name: Preserve result even when this ticker fails
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ta-result-${{ matrix.ticker }}
+          path: ta-results/${{ matrix.ticker }}.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  mail:
+    needs: analyze
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Download available results
+        continue-on-error: true
+        uses: actions/download-artifact@v5
+        with:
+          pattern: ta-result-*
+          path: ta-results
+          merge-multiple: true
+      - name: Deliver separate TradingAgents email
+        env:
+          EMAIL_SENDER: ${{ vars.EMAIL_SENDER || secrets.EMAIL_SENDER }}
+          EMAIL_RECEIVERS: ${{ vars.TRADINGAGENTS_EMAIL_RECEIVERS || vars.EMAIL_RECEIVERS || secrets.EMAIL_RECEIVERS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          TA_SMTP_HOST: ${{ vars.TRADINGAGENTS_SMTP_HOST || 'smtp.qq.com' }}
+          TA_SMTP_PORT: ${{ vars.TRADINGAGENTS_SMTP_PORT || '465' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            python scripts/tradingagents_daily.py mail --output ta-results --tickers "$TA_TICKERS" --wait
+          else
+            python scripts/tradingagents_daily.py mail --output ta-results --tickers "$TA_TICKERS"
+          fi
+      - name: Keep a copy of the report
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: tradingagents-report
+          path: ta-results/TradingAgents-report.md
+          if-no-files-found: warn
+          retention-days: 7
