@@ -1,9 +1,9 @@
 name: 每日股票分析
 
 on:
-  # 美股收盘后：北京时间周二至周六 06:30 (UTC 周一至周五 22:30)
+  # 北京时间周一至周五 06:30；休市日沿用最近有效行情。
   schedule:
-    - cron: '30 22 * * 1-5'
+    - cron: '30 22 * * 0-4'
   
   # 手动触发
   workflow_dispatch:
@@ -535,7 +535,7 @@ jobs:
           
           # 构建命令行参数
           FORCE_RUN_ARG=""
-          if [ "${{ github.event.inputs.force_run }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.force_run }}" = "true" ]; then
             FORCE_RUN_ARG="--force-run"
             echo "⚡ 已启用强制运行模式（跳过交易日检查）"
           fi
