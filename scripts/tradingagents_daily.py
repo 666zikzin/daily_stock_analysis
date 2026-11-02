@@ -23,8 +23,6 @@ SHANGHAI = ZoneInfo('Asia/Shanghai')
 
 def delivery_target(now):
     local = now.astimezone(SHANGHAI)
-    if local.weekday() >= 5:
-        raise ValueError('Delivery is configured for a Shanghai weekday only')
     return local.replace(hour=7, minute=0, second=0, microsecond=0)
 
 
