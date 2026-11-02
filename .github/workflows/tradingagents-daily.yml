@@ -2,8 +2,8 @@ name: TradingAgents 独立日报
 
 on:
   schedule:
-    # Shanghai Monday-Friday 05:30. Analysis runs before the 07:00 delivery target.
-    - cron: '30 21 * * 0-4'
+    # Shanghai Sat05:30; Friday is checked only for a Friday US market holiday.
+    - cron: '30 21 * * 4,5'
   workflow_dispatch:
 
 permissions:
@@ -19,7 +19,28 @@ env:
   TA_TICKERS: VOO,QQQ,RKLB,000660.KS,CHWY,GLXY,GOOGL
 
 jobs:
+  calendar:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.day.outputs.run }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - id: day
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "run=$(python scripts/report_cadence.py ta)" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=run" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
+    needs: calendar
+    if: needs.calendar.outputs.run == 'run'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -54,8 +75,8 @@ jobs:
           retention-days: 7
 
   mail:
-    needs: analyze
-    if: ${{ always() && !cancelled() }}
+    needs: [calendar, analyze]
+    if: ${{ always() && !cancelled() && needs.calendar.outputs.run == 'run' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
