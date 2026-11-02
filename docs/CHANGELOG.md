@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] 按美股已收盘交易日发送DSA、TradingAgents改为周度并保留人工确认后的手动加跑，周五休市时前移周报，配套云端监测按发送日历判断缺信。
+
 - [修复] 将 DSA 邮件日期从北京时间周二至周六改为周一至周五，定时运行跳过交易日门禁以避免周一／休市日静默跳过，并记录仓库级 Actions 停用的排查边界。
 
 - [新功能] 增加隔离运行的官方 TradingAgents 独立日报工作流，分别处理美韩交易日、失败披露及北京时间工作日 07:00 邮件发送目标，不改动原有 DSA 日报。
