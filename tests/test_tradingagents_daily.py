@@ -36,9 +36,9 @@ def test_weekday_delivery_target_is_seven_shanghai():
     assert target.isoformat() == '2026-10-19T07:00:00+08:00'
 
 
-def test_weekend_delivery_rejected():
-    with pytest.raises(ValueError, match='weekday'):
-        module().delivery_target(datetime(2026, 10, 17, 0, tzinfo=timezone.utc))
+def test_weekly_saturday_delivery_and_manual_sunday_are_supported():
+    for day in (17,18):
+        assert module().delivery_target(datetime(2026,10,day,0,tzinfo=timezone.utc)).hour == 7
 
 
 def test_stale_quote_is_rejected():
@@ -120,12 +120,13 @@ def test_workflow_is_separate_and_uses_exact_symbols():
     assert path.exists(), 'Separate workflow is not implemented'
     data = yaml.safe_load(path.read_text(encoding='utf-8'))
     triggers = data.get('on', data.get(True))
-    assert triggers['schedule'][0]['cron'] == '30 21 * * 0-4'
+    assert triggers['schedule'][0]['cron'] == '30 21 * * 4,5'
     matrix = data['jobs']['analyze']['strategy']['matrix']['ticker']
     assert matrix == ['VOO', 'QQQ', 'RKLB', '000660.KS', 'CHWY', 'GLXY', 'GOOGL']
     assert data['jobs']['analyze']['strategy']['fail-fast'] is False
     assert data['concurrency']['group'] != 'stock-analysis'
-    assert data['jobs']['mail']['if'] == '${{ always() && !cancelled() }}'
+    assert data['jobs']['mail']['if'] == "${{ always() && !cancelled() && needs.calendar.outputs.run == 'run' }}"
+    assert data['jobs']['analyze']['needs'] == 'calendar'
 
 
 def test_mail_rejects_partial_smtp_refusal(monkeypatch):
